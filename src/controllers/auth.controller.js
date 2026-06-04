@@ -8,32 +8,6 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import oauthClient from "../config/oauthClient.js";
 
-const generateAccessAndRefreshTokens = async (userId) => {
-  try {
-    const user = await supabase
-      .from("users")
-      .select("*")
-      .eq("userid", userId)
-      .single();
-
-    const accessToken = authService.generateAccessToken(
-      user.userid,
-      user.role,
-      user.name,
-    );
-    const refreshToken = authService.generateRefreshToken(user.userid);
-
-    await supabase
-      .from("users")
-      .update({ refresh_token: refreshToken })
-      .eq("userid", userId);
-
-    return { accessToken, refreshToken };
-  } catch (error) {
-    throw new ApiError(500, "Something went wrong while generating tokens");
-  }
-};
-
 export const registerUser = AsynHandler(async (req, res) => {
   const { name, email, password } = req.body;
 
@@ -59,6 +33,7 @@ export const registerUser = AsynHandler(async (req, res) => {
     name,
     email,
     password: hashPassword,
+    role_type: "patient",
   });
 
   if (error || !user) {
@@ -72,8 +47,8 @@ export const registerUser = AsynHandler(async (req, res) => {
 });
 
 export const loginUser = AsynHandler(async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
+  const { email, password, role } = req.body;
+  if (!email || !password || !role) {
     res.status(400);
     throw new ApiError(400, "Please fill all the fields");
   }
@@ -82,11 +57,16 @@ export const loginUser = AsynHandler(async (req, res) => {
     .from("users")
     .select("*")
     .eq("email", email)
+    .eq("role_type", role)
     .single();
 
   if (error || !user) {
     res.status(400);
     throw new ApiError(400, "Invalid credentials");
+  }
+  if (user.oauth_provider) {
+    res.status(400);
+    throw new ApiError(400, `Please login with ${user.oauth_provider} account`);
   }
 
   const isMatch = await authService.comparePassword(password, user.password);
@@ -95,14 +75,13 @@ export const loginUser = AsynHandler(async (req, res) => {
     throw new ApiError(400, "Invalid credentials");
   }
 
-  const accessToken = authService.generateAccessToken(
-    user.userid,
-    user.role,
-    user.name,
-  );
-  const refreshToken = authService.generateRefreshToken(user.userid);
+  const { accessToken, refreshToken } =
+    await authService.generateAccessAndRefreshTokens(user.id);
 
-  console.log(accessToken, refreshToken);
+  await supabase
+    .from("users")
+    .update({ refresh_token: refreshToken })
+    .eq("id", user.id);
 
   res.cookie("accessToken", accessToken, {
     httpOnly: true,
@@ -119,10 +98,10 @@ export const loginUser = AsynHandler(async (req, res) => {
   });
 
   const userData = {
-    id: user.userid,
+    id: user.id,
     name: user.name,
     email: user.email,
-    role: user.role,
+    role: user.role_type,
     accessToken,
     refreshToken,
   };
@@ -164,7 +143,7 @@ export const isAuthenticated = AsynHandler(async (req, res) => {
 });
 
 export const sendVerifyEmailOTP = AsynHandler(async (req, res) => {
-  const { userid: loginUserId } = req.user;
+  const { id: loginUserId } = req.user;
   console.log(loginUserId);
 
   if (!loginUserId) {
@@ -175,7 +154,7 @@ export const sendVerifyEmailOTP = AsynHandler(async (req, res) => {
   const { data: user, error } = await supabase
     .from("users")
     .select("*")
-    .eq("userid", loginUserId)
+    .eq("id", loginUserId)
     .single();
 
   if (error || !user) {
@@ -215,7 +194,7 @@ export const sendVerifyEmailOTP = AsynHandler(async (req, res) => {
 });
 
 export const verifyEmailOTP = AsynHandler(async (req, res) => {
-  const { userid: loginUserId } = req.user;
+  const { id: loginUserId } = req.user;
   const { otp } = req.body;
 
   if (!loginUserId) {
@@ -226,7 +205,7 @@ export const verifyEmailOTP = AsynHandler(async (req, res) => {
   const { data: user, error } = await supabase
     .from("users")
     .select("*")
-    .eq("userid", loginUserId)
+    .eq("id", loginUserId)
     .single();
 
   if (error || !user) {
@@ -239,10 +218,11 @@ export const verifyEmailOTP = AsynHandler(async (req, res) => {
     throw new ApiError(400, "Email is already verified");
   }
 
-  if (
-    user.email_verification_otp !== otp ||
-    user.email_verification_otp_expires_at < Date.now()
-  ) {
+  const verificationExpiresAt = user.email_verification_otp_expires_at
+    ? new Date(user.email_verification_otp_expires_at).getTime()
+    : 0;
+
+  if (user.email_verification_otp !== otp || verificationExpiresAt < Date.now()) {
     res.status(400);
     throw new ApiError(400, "Invalid or expired OTP");
   }
@@ -325,7 +305,9 @@ export const resetPassword = AsynHandler(async (req, res) => {
 
   if (
     user.password_reset_otp !== otp ||
-    user.password_reset_otp_expires_at < Date.now()
+    (user.password_reset_otp_expires_at
+      ? new Date(user.password_reset_otp_expires_at).getTime()
+      : 0) < Date.now()
   ) {
     res.status(400);
     throw new ApiError(400, "Invalid or expired OTP");
@@ -365,7 +347,7 @@ export const refreshAccessToken = AsynHandler(async (req, res) => {
     const { data: exitingUser, error: userError } = await supabase
       .from("users")
       .select("*")
-      .eq("userid", decodedRefreshToken.userId)
+      .eq("id", decodedRefreshToken.id)
       .eq("refresh_token", incomingRefreshToken)
       .single();
 
@@ -374,9 +356,8 @@ export const refreshAccessToken = AsynHandler(async (req, res) => {
       throw new ApiError(401, "Unauthorized");
     }
 
-    const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
-      exitingUser.userid,
-    );
+    const { accessToken, refreshToken } =
+      await authService.generateAccessAndRefreshTokens(exitingUser.id);
 
     return res
       .status(200)
@@ -472,9 +453,8 @@ export const googleOAuthCallback = AsynHandler(async (req, res) => {
     user = newUser;
   }
 
-  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
-    user.userid,
-  );
+  const { accessToken, refreshToken } =
+    await authService.generateAccessAndRefreshTokens(user.id);
   res
     .status(200)
     .cookie("accessToken", accessToken, {
@@ -549,9 +529,8 @@ export const googleOneTapLogin = AsynHandler(async (req, res) => {
     user = newUser;
   }
 
-  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
-    user.userid,
-  );
+  const { accessToken, refreshToken } =
+    await authService.generateAccessAndRefreshTokens(user.id);
   return res
     .status(200)
     .cookie("accessToken", accessToken, {

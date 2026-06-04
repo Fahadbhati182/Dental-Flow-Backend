@@ -3,6 +3,9 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import "dotenv/config.js";
 import authRouter from "./routes/auth.routes.js";
+import ApiResponse from "./utils/ApiResponse.js";
+import ApiError from "./utils/ApiError.js";
+import adminRouter from "./routes/admin.routes.js";
 
 const app = express();
 
@@ -14,9 +17,24 @@ app.use(cookieParser("dental-app-backend-secret"));
 
 // routes
 app.use("/api/v1/auth", authRouter);
+app.use("/api/v1/admin", adminRouter);
 
 app.use("/", (req, res) => {
   return res.send(`Server of Dental Website is running on ${process.env.PORT}`);
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error(err);
+  if (err instanceof ApiError) {
+    return res
+      .status(err.status || 500)
+      .json(new ApiResponse(err.status || 500, err.message || "Error", null));
+  }
+
+  return res
+    .status(500)
+    .json(new ApiResponse(500, "Internal server error", null));
 });
 
 const PORT = process.env.PORT || 5000;

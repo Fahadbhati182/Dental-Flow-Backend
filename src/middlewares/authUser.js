@@ -16,11 +16,11 @@ export async function authUser(req, res, next) {
     const decoded = jwt.verify(accessToken, process.env.ACCESS_TOKEN_SECRET);
     console.log(decoded);
 
-    if (decoded.userId) {
+    if (decoded.id) {
       const { data: user, error } = await supabase
         .from("users")
         .select("*")
-        .eq("userid", decoded.userId)
+        .eq("id", decoded.id)
         .single();
 
       if (error || !user) {
@@ -34,3 +34,8 @@ export async function authUser(req, res, next) {
     throw new ApiError(401, "Unauthorized");
   }
 }
+
+export const checkIsAdminUser = (req, res, next) => {
+  if (req.user.role_type === "admin") return next();
+  res.status(403).json({ error: "You cannot perform this action" });
+};
