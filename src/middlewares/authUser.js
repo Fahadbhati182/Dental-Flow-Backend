@@ -35,7 +35,17 @@ export async function authUser(req, res, next) {
   }
 }
 
-export const checkIsAdminUser = (req, res, next) => {
-  if (req.user.role_type === "admin") return next();
-  res.status(403).json({ error: "You cannot perform this action" });
+
+
+export const checkRolesAllowed = (allowedRoles) => {
+  return (req, res, next) => {
+    if (allowedRoles.includes(req.user.role_type)) {
+      return next();
+    }
+
+    return res.status(403).json({
+      message:
+        "Access denied. You don't have permission to perform this action.",
+    });
+  };
 };

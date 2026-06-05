@@ -4,6 +4,7 @@ import ApiResponse from "../utils/ApiResponse.js";
 import AsynHandler from "../utils/AsynHandler.js";
 import { supabase } from "../config/db.js";
 import authService from "../services/authServices.js";
+import { sendEmail } from "../config/nodemailer.js";
 
 export const loginAdmin = AsynHandler(async (req, res) => {
   const { email, password, role } = req.body;
@@ -60,10 +61,14 @@ export const loginAdmin = AsynHandler(async (req, res) => {
       throw new ApiError(500, "Something went wrong while creating admin user");
     }
 
+    if (!newUser) {
+      res.status(500);
+      throw new ApiError(500, "Failed to create admin user");
+    }
+
     user = newUser;
   }
-  const { refreshToken, accessToken } =
-    await authService.generateAccessAndRefreshTokens(user.id);
+  const { refreshToken, accessToken } = await authService.generateAccessAndRefreshTokens(user.id);
 
   const { error: updateError } = await supabase
     .from("users")
@@ -97,11 +102,140 @@ export const loginAdmin = AsynHandler(async (req, res) => {
     refreshToken,
   };
 
-  return res.status(200).json(
-    new ApiResponse({
-      statusCode: 200,
-      message: "admin logged in successfully",
-      data: userData,
-    }),
-  );
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "admin logged in successfully", userData));
 });
+
+export const addStaff = AsynHandler(async (req, res) => {
+  const {
+    name,
+    email,
+    password,
+    role,
+    phone,
+    gender,
+    date_of_birth,
+    address,
+    joining_date,
+    salary,
+  } = req.body;
+
+  if (
+    [
+      name,
+      email,
+      password,
+      role,
+      phone,
+      gender,
+      date_of_birth,
+      address,
+      joining_date,
+    ].some((field) => !field)
+  ) {
+    res.status(400);
+    throw new ApiError(400, "Please fill all the fields");
+  }
+
+  if (typeof salary !== "number" || salary <= 0) {
+    res.status(400);
+    throw new ApiError(400, "Please provide a valid salary");
+  }
+
+  const { data: user, error } = await supabase
+    .from("users")
+    .insert({
+      name,
+      email,
+      password: await authService.hashPassword(password),
+      role_type: role,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    res.status(500);
+    throw new ApiError(500, "Something went wrong while creating staff user");
+  }
+
+  if (!user) {
+    res.status(500);
+    throw new ApiError(500, "Failed to create staff user");
+  }
+
+  const { data: staffData, error: staffError } = await supabase
+    .from("staff")
+    .insert({
+      user_id: user.id,
+      phone,
+      gender,
+      date_of_birth,
+      address,
+      joining_date,
+      salary,
+    })
+    .select()
+    .single();
+
+  if (staffError) {
+    await supabase.from("users").delete().eq("id", user.id);
+    throw new ApiError(500, "Something went wrong while creating staff data");
+  }
+
+  await sendEmail(
+    user.email,
+    "Staff Account Created",
+    `Your staff account has been created successfully. 
+    Your login credentials are:\n
+    Email: ${email}\n
+    Password: ${password}\n
+    Please log in and change your password immediately.`,
+  );
+
+  return res
+    .status(201)
+    .json(new ApiResponse(201, "Staff added successfully", staffData));
+});
+
+export const getAllStaff = AsynHandler(async (req, res) => {
+  const { data: staffList, error } = await supabase
+    .from("staff")
+    .select(`*, user:users(id, name, email, role_type)`)
+    .eq("is_deleted", false);
+
+  if (error) {
+    res.status(500);
+    throw new ApiError(500, "Something went wrong while fetching staff data");
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "Staff data fetched successfully", staffList));
+});
+
+// soft delete staff data by setting is_deleted to true
+export const deleteStaff = AsynHandler(async (req, res) => {
+  const { staffId } = req.params;
+
+  const { data: staff, error } = await supabase
+    .from("staff")
+    .select("*")
+    .eq("id", staffId)
+    .single();
+
+  if (error || !staff) {
+    res.status(404);
+    throw new ApiError(404, "Staff not found");
+  }
+
+  await supabase.from("staff").update({ is_deleted: true }).eq("id", staffId);
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "Staff deleted successfully", null));
+});
+
+
+
+

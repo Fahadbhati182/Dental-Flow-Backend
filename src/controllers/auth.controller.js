@@ -64,7 +64,9 @@ export const loginUser = AsynHandler(async (req, res) => {
     res.status(400);
     throw new ApiError(400, "Invalid credentials");
   }
-  if (user.oauth_provider) {
+
+  // oauth only for patients
+  if (role === "patient" && user.oauth_provider) {
     res.status(400);
     throw new ApiError(400, `Please login with ${user.oauth_provider} account`);
   }
@@ -222,7 +224,10 @@ export const verifyEmailOTP = AsynHandler(async (req, res) => {
     ? new Date(user.email_verification_otp_expires_at).getTime()
     : 0;
 
-  if (user.email_verification_otp !== otp || verificationExpiresAt < Date.now()) {
+  if (
+    user.email_verification_otp !== otp ||
+    verificationExpiresAt < Date.now()
+  ) {
     res.status(400);
     throw new ApiError(400, "Invalid or expired OTP");
   }

@@ -6,6 +6,7 @@ import authRouter from "./routes/auth.routes.js";
 import ApiResponse from "./utils/ApiResponse.js";
 import ApiError from "./utils/ApiError.js";
 import adminRouter from "./routes/admin.routes.js";
+import userRouter from "./routes/user.routes.js";
 
 const app = express();
 
@@ -17,6 +18,7 @@ app.use(cookieParser("dental-app-backend-secret"));
 
 // routes
 app.use("/api/v1/auth", authRouter);
+app.use("/api/v1/user", userRouter);
 app.use("/api/v1/admin", adminRouter);
 
 app.use("/", (req, res) => {
