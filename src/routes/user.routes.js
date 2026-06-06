@@ -1,5 +1,5 @@
 import express from "express";
-import { authUser } from "../middlewares/authUser.js";
+import { authUser, checkRolesAllowed } from "../middlewares/authUser.js";
 import { addDentistDetails } from "../controllers/user.controller.js";
 
 const userRouter = express.Router();

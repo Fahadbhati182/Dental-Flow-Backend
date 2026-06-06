@@ -8,6 +8,7 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import oauthClient from "../config/oauthClient.js";
 
+// register only for patient
 export const registerUser = AsynHandler(async (req, res) => {
   const { name, email, password } = req.body;
 
@@ -20,8 +21,9 @@ export const registerUser = AsynHandler(async (req, res) => {
     .from("users")
     .select("*")
     .eq("email", email)
-    .single();
-  console.log(exitingUser, userError);
+    .maybeSingle();
+
+  console.log(userError);
 
   if (exitingUser) {
     res.status(400);
@@ -29,12 +31,16 @@ export const registerUser = AsynHandler(async (req, res) => {
   }
 
   const hashPassword = await authService.hashPassword(password);
-  const { data: user, error } = await supabase.from("users").insert({
-    name,
-    email,
-    password: hashPassword,
-    role_type: "patient",
-  });
+  const { data: user, error } = await supabase
+    .from("users")
+    .insert({
+      name,
+      email,
+      password: hashPassword,
+      role_type: "patient",
+    })
+    .select()
+    .single();
 
   if (error || !user) {
     res.status(500);
@@ -65,8 +71,8 @@ export const loginUser = AsynHandler(async (req, res) => {
     throw new ApiError(400, "Invalid credentials");
   }
 
-  // oauth only for patients
-  if (role === "patient" && user.oauth_provider) {
+  // oauth for all
+  if (user.oauth_provider) {
     res.status(400);
     throw new ApiError(400, `Please login with ${user.oauth_provider} account`);
   }
@@ -224,6 +230,15 @@ export const verifyEmailOTP = AsynHandler(async (req, res) => {
     ? new Date(user.email_verification_otp_expires_at).getTime()
     : 0;
 
+  console.log("DB expiry raw:", user.email_verification_otp_expires_at);
+
+  console.log(
+    "DB expiry date:",
+    new Date(user.email_verification_otp_expires_at),
+  );
+
+  console.log("Current date:", new Date());
+
   if (
     user.email_verification_otp !== otp ||
     verificationExpiresAt < Date.now()
@@ -338,6 +353,8 @@ export const refreshAccessToken = AsynHandler(async (req, res) => {
     req?.headers?.authorization?.split(" ")[1] ||
     req.body.refreshToken;
 
+  console.log(incomingRefreshToken);
+
   if (!incomingRefreshToken) {
     res.status(401);
     throw new ApiError(401, "Unauthorized");
@@ -348,6 +365,7 @@ export const refreshAccessToken = AsynHandler(async (req, res) => {
       incomingRefreshToken,
       process.env.REFRESH_TOKEN_SECRET,
     );
+    console.log(decodedRefreshToken);
 
     const { data: exitingUser, error: userError } = await supabase
       .from("users")
@@ -355,6 +373,7 @@ export const refreshAccessToken = AsynHandler(async (req, res) => {
       .eq("id", decodedRefreshToken.id)
       .eq("refresh_token", incomingRefreshToken)
       .single();
+    console.log(exitingUser);
 
     if (userError || !exitingUser) {
       res.status(401);
@@ -363,6 +382,17 @@ export const refreshAccessToken = AsynHandler(async (req, res) => {
 
     const { accessToken, refreshToken } =
       await authService.generateAccessAndRefreshTokens(exitingUser.id);
+
+    const { error: updateUserError } = await supabase
+      .from("users")
+      .update({ refresh_token: refreshToken })
+      .eq("id", exitingUser.id)
+      .select()
+      .single();
+
+    if (updateUserError) {
+      return res.status(500).json(new ApiError(500, "Something went wrong "));
+    }
 
     return res
       .status(200)
@@ -416,6 +446,7 @@ export const googleOAuthCallback = AsynHandler(async (req, res) => {
 
   const payload = ticket.getPayload();
 
+
   if (!payload) {
     res.status(400);
     throw new ApiError(400, "Invalid ID token");
@@ -458,8 +489,19 @@ export const googleOAuthCallback = AsynHandler(async (req, res) => {
     user = newUser;
   }
 
-  const { accessToken, refreshToken } =
-    await authService.generateAccessAndRefreshTokens(user.id);
+  const { accessToken, refreshToken } = await authService.generateAccessAndRefreshTokens(user.id);
+
+  const { error: updateUserError } = await supabase
+      .from("users")
+      .update({ refresh_token: refreshToken })
+      .eq("id", user.id)
+      .select()
+      .single();
+
+    if (updateUserError) {
+      return res.status(500).json(new ApiError(500, "Something went wrong "));
+    }
+
   res
     .status(200)
     .cookie("accessToken", accessToken, {

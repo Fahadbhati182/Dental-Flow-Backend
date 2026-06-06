@@ -19,12 +19,12 @@ export const addDentistDetails = AsynHandler(async (req, res) => {
     bio,
   } = req.body;
 
-  if (!specialization || !Array.isArray(specialization)) {
-    throw new ApiError(400, "specializaion is required");
+  if (!Array.isArray(specialization) || specialization.length === 0) {
+    throw new ApiError(400, "At least one specialization is required");
   }
 
-  if (!qualification || !Array.isArray(qualification)) {
-    throw new ApiError(400, "qualification is required");
+  if (!Array.isArray(qualification) || qualification.length === 0) {
+    throw new ApiError(400, "At least one qualification is required");
   }
 
   if (!license_number || !bio) {
@@ -44,20 +44,20 @@ export const addDentistDetails = AsynHandler(async (req, res) => {
     typeof consultation_fee !== "number" ||
     consultation_fee < 0
   ) {
-    throw new ApiError(400, "Invalid experience years");
+    throw new ApiError(400, "Invalid consultation fee");
   }
   const { data: staffData, error: staffError } = await supabase
     .from("staff")
     .select("*")
     .eq("user_id", user.id)
-    .single();
+    .maybeSingle();
 
   if (staffError) {
     throw new ApiError(500, "Something went wrong ");
   }
 
   if (!staffData) {
-    throw new ApiError(400, "staff data doesnot exits");
+    throw new ApiError(404, "staff data doesnot exits");
   }
 
   if (staffData.designation !== "dentist") {
@@ -72,6 +72,16 @@ export const addDentistDetails = AsynHandler(async (req, res) => {
 
   if (existingDentist) {
     throw new ApiError(409, "Dentist profile already exists");
+  }
+
+  const { data: existingLicense } = await supabase
+    .from("dentists")
+    .select("id")
+    .eq("license_number", license_number)
+    .maybeSingle();
+
+  if (existingLicense) {
+    throw new ApiError(409, "License number already exists");
   }
 
   const { data: dentistData, error: dentistError } = await supabase
@@ -100,9 +110,10 @@ export const addDentistDetails = AsynHandler(async (req, res) => {
     .status(200)
     .json(
       new ApiResponse(
-        200,
+        201,
         "dentist information is added successfully",
         dentistData,
       ),
     );
 });
+

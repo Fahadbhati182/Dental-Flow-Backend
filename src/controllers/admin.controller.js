@@ -68,7 +68,9 @@ export const loginAdmin = AsynHandler(async (req, res) => {
 
     user = newUser;
   }
-  const { refreshToken, accessToken } = await authService.generateAccessAndRefreshTokens(user.id);
+  console.log(user);
+  const { refreshToken, accessToken } =
+    await authService.generateAccessAndRefreshTokens(user.id);
 
   const { error: updateError } = await supabase
     .from("users")
@@ -138,9 +140,32 @@ export const addStaff = AsynHandler(async (req, res) => {
     throw new ApiError(400, "Please fill all the fields");
   }
 
+  const parsedSalary = Number(salary);
   if (typeof salary !== "number" || salary <= 0) {
     res.status(400);
     throw new ApiError(400, "Please provide a valid salary");
+  }
+
+  const allowedRoles = ["dentist", "receptionist"];
+
+  if (!allowedRoles.includes(role)) {
+    throw new ApiError(400, "Invalid role");
+  }
+
+  // staff already exit or not
+  const { data: staffExits, error: staffExitsError } = await supabase
+    .from("users")
+    .select("*")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (staffExitsError) {
+    res.status(500);
+    throw new ApiError(500, "Something went wrong");
+  }
+
+  if (staffExits) {
+    throw new ApiError(409, "Staff already exists with this email");
   }
 
   const { data: user, error } = await supabase
@@ -164,19 +189,39 @@ export const addStaff = AsynHandler(async (req, res) => {
     throw new ApiError(500, "Failed to create staff user");
   }
 
+  const { data: lastStaff } = await supabase
+    .from("staff")
+    .select("employee_id")
+    .order("employee_id", { ascending: false })
+    .limit(1)
+    .single();
+
+  let nextNumber = 1;
+
+  if (lastStaff) {
+    nextNumber = parseInt(lastStaff.employee_id.replace("EMP-", ""), 10) + 1;
+  }
+
+  const employeeId = `EMP-${String(nextNumber).padStart(6, "0")}`;
+
   const { data: staffData, error: staffError } = await supabase
     .from("staff")
     .insert({
       user_id: user.id,
       phone,
       gender,
+      designation: role,
       date_of_birth,
       address,
       joining_date,
       salary,
+      employee_id: employeeId,
     })
     .select()
     .single();
+
+  console.log(staffData);
+  console.log(staffError);
 
   if (staffError) {
     await supabase.from("users").delete().eq("id", user.id);
@@ -217,6 +262,7 @@ export const getAllStaff = AsynHandler(async (req, res) => {
 // soft delete staff data by setting is_deleted to true
 export const deleteStaff = AsynHandler(async (req, res) => {
   const { staffId } = req.params;
+  console.log(staffId);
 
   const { data: staff, error } = await supabase
     .from("staff")
@@ -235,7 +281,3 @@ export const deleteStaff = AsynHandler(async (req, res) => {
     .status(200)
     .json(new ApiResponse(200, "Staff deleted successfully", null));
 });
-
-
-
-
