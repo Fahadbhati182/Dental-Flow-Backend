@@ -106,3 +106,4 @@ export const addDentistDetails = AsynHandler(async (req, res) => {
       ),
     );
 });
+
