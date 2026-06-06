@@ -4,7 +4,6 @@ import { addDentistDetails } from "../controllers/user.controller.js";
 
 const userRouter = express.Router();
 
-// dentist
 userRouter.post(
   "/add-dentist-details",
   authUser,
@@ -12,4 +11,4 @@ userRouter.post(
   addDentistDetails,
 );
 
-export default userRouter;
+export default userRouter; 

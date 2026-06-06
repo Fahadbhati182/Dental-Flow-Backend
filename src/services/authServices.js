@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { supabase } from "../config/db.js";
+import ApiError from "../utils/ApiError.js";
 
 async function hashPassword(password) {
   return await bcrypt.hash(password, 10);

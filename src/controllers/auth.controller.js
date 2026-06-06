@@ -24,6 +24,7 @@ export const registerUser = AsynHandler(async (req, res) => {
     .maybeSingle();
 
   console.log(userError);
+  console.log(exitingUser, userError);
 
   if (exitingUser) {
     res.status(400);
@@ -43,6 +44,8 @@ export const registerUser = AsynHandler(async (req, res) => {
     .single();
 
   if (error || !user) {
+    console.log("INSERT USER:", user);
+console.log("INSERT ERROR:", error);
     res.status(500);
     throw new ApiError(500, "Something went wrong");
   }
@@ -76,6 +79,7 @@ export const loginUser = AsynHandler(async (req, res) => {
     res.status(400);
     throw new ApiError(400, `Please login with ${user.oauth_provider} account`);
   }
+
 
   const isMatch = await authService.comparePassword(password, user.password);
   if (!isMatch) {
@@ -114,13 +118,7 @@ export const loginUser = AsynHandler(async (req, res) => {
     refreshToken,
   };
 
-  res.status(200).json(
-    new ApiResponse({
-      statusCode: 200,
-      message: "Logged in successfully",
-      data: userData,
-    }),
-  );
+  res.status(200).json(new ApiResponse(200, "Logged in successfully", userData));
 });
 
 export const logoutUser = AsynHandler(async (req, res) => {
