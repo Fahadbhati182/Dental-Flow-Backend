@@ -1,123 +1,101 @@
 import { supabase } from "../config/db.js";
-import {
-  getNextAppointment,
-  getPastAppointments,
-  getUpcomingAppointments,
-} from "../services/appointment/patient.js";
+
 import AsynHandler from "../utils/AsynHandler.js";
 import ApiError from "../utils/ApiError.js";
 
-export const updatePatientProfile = AsynHandler(async (req, res) => {
-  const authUserId = req.user?.userId || req.user?.id;
+// these api will run after patient registeraion
+export const addPatientDetails = AsynHandler(async (req, res) => {
+  const { user: authenticatedUser } = req.user;
 
-  if (!authUserId) {
-    throw new ApiError(401, "User not authenticated or missing context.");
+  if (!authenticatedUser) {
+    res.status(403);
+    throw new ApiError(403, "Unauthorized");
   }
 
   const {
-    fullName,
-    email,
+    date_of_birth,
+    gender,
     phone,
-    dob,
-    allergies,
-    chronicConditions,
-    currentMedications,
-    insuranceProvider,
-    insurancePolicyNo,
-    pastSurgeries,
-    additionalNotes,
+    address,
+    insurance_provider,
+    insurance_policy_no,
   } = req.body;
 
-  const { data: updatedUser, error: userError } = await supabase
-    .from("users")
-    .update({
-      full_name: fullName,
-      email,
-      phone,
-    })
-    .eq("user_id", authUserId)
-    .select()
-    .single();
-
-  if (userError) {
-    throw new ApiError(
-      400,
-      `Failed to update user profile: ${userError.message}`
-    );
+  if (!date_of_birth || !gender || !phone || !address) {
+    throw new ApiError(400, "Required fields are missing");
   }
 
-  const { data: patient, error: patientFetchError } = await supabase
+  if (!["male", "female", "other"].includes(gender)) {
+    throw new ApiError(400, "Invalid gender");
+  }
+
+  const { data: exitingPatient, error } = await supabase
     .from("patients")
-    .select("patient_id")
-    .eq("user_id", authUserId)
+    .select("*")
+    .eq("user_id", authenticatedUser.id)
+    .maybeSingle();
+
+  if (error) {
+    throw new ApiError(500, "Something went wrong");
+  }
+
+  if (exitingPatient) {
+    throw new ApiError(400, "Patient already exit with this id");
+  }
+
+  // 000001
+
+  const { data: prevPatient } = await supabase
+    .from("patients")
+    .select("patient_code")
+    .order("patient_code", { ascending: false })
+    .limit(1)
     .single();
 
-  if (patientFetchError || !patient) {
-    throw new ApiError(404, "Patient record not found.");
+  let nextNumber = 1;
+  if (prevPatient) {
+    nextNumber = parseInt(prevPatient.patient_code.replace("PAT-", ""), 10) + 1;
   }
 
-  const patientId = patient.patientId || patient.patient_id;
+  const patient_code = `PAT-${String(nextNumber).padStart(6, "0")}`;
 
-  if (dob) {
-    const { error: patientUpdateError } = await supabase
-      .from("patients")
-      .update({
-        date_of_birth: dob,
-      })
-      .eq("patient_id", patientId);
+  const { data: patient, error: createError } = await supabase
+    .from("users")
+    .insert({
+      date_of_birth,
+      gender,
+      phone,
+      address,
+      insurance_provider,
+      insurance_policy_no,
+      patient_code,
+    })
+    .select(`*, user:users(id,name,email,role_type)`)
+    .single();
 
-    if (patientUpdateError) {
-      throw new ApiError(
-        400,
-        `Failed to update birth date: ${patientUpdateError.message}`
-      );
-    }
+  if (createError || !patient) {
+    throw new ApiError(500, "Something went wrong");
   }
 
-  const { error: historyError } = await supabase
-    .from("medical_history")
-    .upsert(
-      {
-        patient_id: patientId,
-        allergies,
-        chronic_conditions: chronicConditions,
-        current_medications: currentMedications,
-        insurance_provider: insuranceProvider,
-        insurance_policy_no: insurancePolicyNo,
-        past_surgeries: pastSurgeries,
-        notes: additionalNotes,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "patient_id" }
+  return res
+    .status(201)
+    .json(
+      new ApiResponse(201, "patient information  added successfully", patient),
     );
-
-  if (historyError) {
-    throw new ApiError(
-      400,
-      `Failed to update medical history: ${historyError.message}`
-    );
-  }
-
-  return res.status(200).json({
-    success: true,
-    message: "Profile updated successfully.",
-    data: {
-      user: updatedUser,
-    },
-  });
 });
 
-export const getNext = AsynHandler(async (req, res) => {
-  const data = await getNextAppointment(req);
-  return res.status(200).json({ success: true, data });
-});
+// Yaha par yeh appointment wala chod kar ...patient se unke medical_history leni ha uske liye add,get and update apis banani ha tuje chat gpt nhi karna laude ....abhi appointment wala fucntionality par kaam nhi karte
 
-export const getPast = AsynHandler(async (req, res) => {
-  const data = await getPastAppointments(req);
-  return res.status(200).json({ success: true, data });
-});
+// ADil bana
 
-export const getUpcoming = AsynHandler(async (req, res) => {
-  const data = await getUpcomingAppointments(req);
-  return res.status(200).json({ success: true, data });
-});
+export const addPatientMedicalHistory = AsynHandler(async (req, res) => {});
+export const getPatientMedicalHistory = AsynHandler(async (req, res) => {});
+export const updatePatientMedicalHistory = AsynHandler(async (req, res) => {});
+
+export const updatePatientProfile = AsynHandler(async (req, res) => {});
+
+export const getNext = AsynHandler(async (req, res) => {});
+
+export const getPast = AsynHandler(async (req, res) => {});
+
+export const getUpcoming = AsynHandler(async (req, res) => {});
