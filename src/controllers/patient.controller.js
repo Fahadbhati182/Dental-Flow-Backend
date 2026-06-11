@@ -70,17 +70,26 @@ export const addPatientDetails = AsynHandler(async (req, res) => {
       insurance_policy_no,
       patient_code,
     })
-    .select(`*, user:users(id,name,email,role_type)`)
+    .select(`*, :users(id,name,email,role_type)`)
     .single();
 
   if (createError || !patient) {
     throw new ApiError(500, "Something went wrong");
   }
 
+  const patientData = {
+    ...data,
+    ...data.users,
+  };
+
   return res
     .status(201)
     .json(
-      new ApiResponse(201, "patient information  added successfully", patient),
+      new ApiResponse(
+        201,
+        "patient information  added successfully",
+        patientData,
+      ),
     );
 });
 
@@ -93,9 +102,6 @@ export const getPatientMedicalHistory = AsynHandler(async (req, res) => {});
 export const updatePatientMedicalHistory = AsynHandler(async (req, res) => {});
 
 export const updatePatientProfile = AsynHandler(async (req, res) => {});
-
 export const getNext = AsynHandler(async (req, res) => {});
-
 export const getPast = AsynHandler(async (req, res) => {});
-
 export const getUpcoming = AsynHandler(async (req, res) => {});
