@@ -5,6 +5,7 @@ import AsynHandler from "../utils/AsynHandler.js";
 import { supabase } from "../config/db.js";
 import authService from "../services/authServices.js";
 import { sendEmail } from "../config/nodemailer.js";
+import redisClient from "../config/redisClient.js";
 
 export const loginAdmin = AsynHandler(async (req, res) => {
   const { email, password, role } = req.body;
@@ -228,6 +229,10 @@ export const addStaff = AsynHandler(async (req, res) => {
     throw new ApiError(500, "Something went wrong while creating staff data");
   }
 
+  // delete the cached staff data from redis
+  const redisStaffKey = "allStaffData";
+  await redisClient.json.del(redisStaffKey);
+
   await sendEmail(
     user.email,
     "Staff Account Created",
@@ -244,6 +249,21 @@ export const addStaff = AsynHandler(async (req, res) => {
 });
 
 export const getAllStaff = AsynHandler(async (req, res) => {
+  const redisStaffKey = "allStaffData";
+  const cachedStaffData = await redisClient.json.get(redisStaffKey);
+
+  if (cachedStaffData) {
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          "Staff data fetched successfully",
+          cachedStaffData,
+        ),
+      );
+  }
+
   const { data: staffList, error } = await supabase
     .from("staff")
     .select(`*, user:users(id, name, email, role_type)`)
@@ -253,6 +273,9 @@ export const getAllStaff = AsynHandler(async (req, res) => {
     res.status(500);
     throw new ApiError(500, "Something went wrong while fetching staff data");
   }
+
+  await redisClient.json.set(redisStaffKey, "$", staffList);
+  await redisClient.expire(redisStaffKey, 60 * 20); // Cache for 20 minutes
 
   return res
     .status(200)
@@ -274,8 +297,11 @@ export const deleteStaff = AsynHandler(async (req, res) => {
     res.status(404);
     throw new ApiError(404, "Staff not found");
   }
-
   await supabase.from("staff").update({ is_deleted: true }).eq("id", staffId);
+
+  // delete the cached staff data from redis
+  const redisStaffKey = "allStaffData";
+  await redisClient.json.del(redisStaffKey);
 
   return res
     .status(200)

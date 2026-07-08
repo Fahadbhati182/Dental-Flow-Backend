@@ -7,6 +7,7 @@ import {
 import AsynHandler from "../utils/AsynHandler.js";
 import ApiError from "../utils/ApiError.js";
 import ApiResponse from "../utils/ApiResponse.js";
+import redisClient from "../config/redisClient.js";
 
 // Reusable helper to dynamically fetch patient_id inside route scopes
 const getPatientIdFromUser = async (req) => {
@@ -192,6 +193,16 @@ export const addPatientMedicalHistory = AsynHandler(async (req, res) => {
 export const getPatientMedicalHistory = AsynHandler(async (req, res) => {
   const patientId = await getPatientIdFromUser(req);
 
+  const redisPatienKey = `medical_history:${patientId}`;
+  const cahcedMedicalHistory = await redisClient.get(redisPatienKey);
+
+  if (cahcedMedicalHistory) {
+    return res.status(200).json({
+      success: true,
+      data: cahcedMedicalHistory || {},
+    });
+  }
+
   const { data: medicalHistory, error } = await supabase
     .from("medical_history")
     .select("*")
@@ -201,6 +212,8 @@ export const getPatientMedicalHistory = AsynHandler(async (req, res) => {
   if (error) {
     throw new ApiError(500, "Failed to get medical history");
   }
+  await redisClient.json.set(redisPatienKey, "$", medicalHistory);
+  await redisClient.expire(redisPatienKey, 60 * 20); // Cache for 20 minutes
 
   return res.status(200).json({
     success: true,
@@ -254,6 +267,10 @@ export const updatePatientMedicalHistory = AsynHandler(async (req, res) => {
     throw new ApiError(500, "Failed to update medical history");
   }
 
+  // delete cached medical history from redis
+  const redisPatienKey = `medical_history:${patientId}`;
+  await redisClient.json.del(redisPatienKey);
+
   return res.status(200).json({
     success: true,
     message: "Medical history updated successfully",
@@ -285,9 +302,8 @@ export const updatePatientProfile = AsynHandler(async (req, res) => {
   const { data: updatedUser, error: userError } = await supabase
     .from("users")
     .update({
-      full_name: fullName,
+      name: fullName,
       email,
-      phone,
     })
     .eq("id", authUserId)
     .select()
@@ -338,6 +354,10 @@ export const updatePatientProfile = AsynHandler(async (req, res) => {
     );
   }
 
+  // delete cached medical history from redis after update
+  const redisPatienKey = `medical_history:${patientId}`;
+  await redisClient.json.del(redisPatienKey);
+
   return res.status(200).json({
     success: true,
     message: "Profile updated successfully.",
@@ -347,18 +367,66 @@ export const updatePatientProfile = AsynHandler(async (req, res) => {
 
 export const getNext = AsynHandler(async (req, res) => {
   const patientId = await getPatientIdFromUser(req);
+
+  const redisNextAppointmentKey = `next_appointment:${patientId}`;
+  const cachedNextAppointment = await redisClient.json.get(
+    redisNextAppointmentKey,
+  );
+
+  if (cachedNextAppointment) {
+    return res.status(200).json({
+      success: true,
+      data: cachedNextAppointment || {},
+    });
+  }
+
   const data = await getNextAppointment(patientId);
+  if (data) {
+    await redisClient.json.set(redisNextAppointmentKey, "$", data);
+    await redisClient.expire(redisNextAppointmentKey, 60 * 5);
+  }
+
   return res.status(200).json({ success: true, data });
 });
 
 export const getPast = AsynHandler(async (req, res) => {
   const patientId = await getPatientIdFromUser(req);
+
+  const redisPastAppointmentsKey = `past_appointments:${patientId}`;
+  const cachedPastAppointments = await redisClient.json.get(
+    redisPastAppointmentsKey,
+  );
+
+  if (cachedPastAppointments) {
+    return res
+      .status(200)
+      .json({ success: true, data: cachedPastAppointments });
+  }
+
   const data = await getPastAppointments(patientId);
+  await redisClient.json.set(redisPastAppointmentsKey, "$", data);
+  await redisClient.expire(redisPastAppointmentsKey, 60 * 5); // Cache for 5 minutes
+
   return res.status(200).json({ success: true, data });
 });
 
 export const getUpcoming = AsynHandler(async (req, res) => {
   const patientId = await getPatientIdFromUser(req);
+
+  const redisUpcomingAppointmentsKey = `upcoming_appointments:${patientId}`;
+  const cachedUpcomingAppointments = await redisClient.json.get(
+    redisUpcomingAppointmentsKey,
+  );
+
+  if (cachedUpcomingAppointments) {
+    return res
+      .status(200)
+      .json({ success: true, data: cachedUpcomingAppointments });
+  }
+
   const data = await getUpcomingAppointments(patientId);
+  await redisClient.json.set(redisUpcomingAppointmentsKey, "$", data);
+  await redisClient.expire(redisUpcomingAppointmentsKey, 60 * 5); // Cache for 5 minutes
+
   return res.status(200).json({ success: true, data });
 });
