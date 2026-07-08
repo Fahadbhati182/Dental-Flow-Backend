@@ -93,16 +93,21 @@ export const addPatientDetails = AsynHandler(async (req, res) => {
       insurance_policy_no,
       patient_code,
     })
-    .select(`*, :users(id,name,email,role_type)`)
+    .select(
+      `
+    *,
+    users(id, name, email, role_type)
+`,
+    )
     .single();
 
   if (createError || !patient) {
+    console.log(createError);
     throw new ApiError(500, "Something went wrong creating patient details");
   }
 
   const patientData = {
-    ...data,
-    ...data.users,
+    ...patient,
   };
 
   return res
@@ -339,7 +344,6 @@ export const updatePatientProfile = AsynHandler(async (req, res) => {
     data: { user: updatedUser },
   });
 });
-
 
 export const getNext = AsynHandler(async (req, res) => {
   const patientId = await getPatientIdFromUser(req);

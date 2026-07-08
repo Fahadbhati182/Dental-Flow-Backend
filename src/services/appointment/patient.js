@@ -1,11 +1,12 @@
-import { supabase } from "../config/db.js";
+import { supabase } from "../../config/db.js";
 
 // Get next appointment (single)
 export const getNextAppointment = async (patientId) => {
   try {
     const { data, error } = await supabase
       .from("appointments")
-      .select(`
+      .select(
+        `
         appointment_id,
         scheduled_at,
         scheduled_date,
@@ -15,20 +16,21 @@ export const getNextAppointment = async (patientId) => {
         status,
         type,
         room_no,
-        dentist_profile (
-          dentist_id,
+        dentists (
+          id,
           staff (
             users (
-              full_name
+              name
             )
           )
         )
-      `)
+      `,
+      )
       .eq("patient_id", patientId)
       .gte("scheduled_at", new Date().toISOString())
       .order("scheduled_at", { ascending: true })
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (error) throw error;
 
@@ -44,7 +46,8 @@ export const getUpcomingAppointments = async (patientId) => {
   try {
     const { data, error } = await supabase
       .from("appointments")
-      .select(`
+      .select(
+        `
         appointment_id,
         scheduled_at,
         scheduled_date,
@@ -54,15 +57,16 @@ export const getUpcomingAppointments = async (patientId) => {
         status,
         type,
         room_no,
-        dentist_profile (
-          dentist_id,
+        dentists (
+          id,
           staff (
             users (
-              full_name
+              name
             )
           )
         )
-      `)
+      `,
+      )
       .eq("patient_id", patientId)
       .gte("scheduled_at", new Date().toISOString())
       .order("scheduled_at", { ascending: true });
@@ -81,7 +85,8 @@ export const getPastAppointments = async (patientId) => {
   try {
     const { data, error } = await supabase
       .from("appointments")
-      .select(`
+      .select(
+        `
         appointment_id,
         scheduled_at,
         scheduled_date,
@@ -91,15 +96,16 @@ export const getPastAppointments = async (patientId) => {
         status,
         type,
         room_no,
-        dentist_profile (
-          dentist_id,
+        dentists (
+          id,
           staff (
             users (
-              full_name
+              name
             )
           )
         )
-      `)
+      `,
+      )
       .eq("patient_id", patientId)
       .lt("scheduled_at", new Date().toISOString())
       .order("scheduled_at", { ascending: false });

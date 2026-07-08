@@ -21,7 +21,7 @@ app.use(cookieParser("dental-app-backend-secret"));
 app.use("/api/v1/admin", adminRouter);
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/user", dentistRouter);
-app.use("/api/v1/admin", patientRouter);
+app.use("/api/v1/patient", patientRouter);
 
 app.use("/", (req, res) => {
   return res.send(`Server of Dental Website is running on ${process.env.PORT}`);
