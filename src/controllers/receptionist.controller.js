@@ -1,11 +1,9 @@
-import { supabase } from "../config/db";
-import ApiError from "../utils/ApiError";
-import ApiResponse from "../utils/ApiResponse";
-import AsynHandler from "../utils/AsynHandler";
+import { supabase } from "../config/db.js";
+import ApiError from "../utils/ApiError.js";
+import ApiResponse from "../utils/ApiResponse.js";
+import AsynHandler from "../utils/AsynHandler.js";
 import { getAllPatients, getPatientById } from "../services/userService.js";
-import { getNextAppointment, getPastAppointments, getUpcomingAppointments } from "../services/appointment/patient.js";
-
-const id = req.user?.userId;
+import { getAvailableDentists } from "../services/appointment/receptionist.js";
 
 export const getPatients = AsynHandler(async (req, res) => {
     const { page, limit } = req.query;
@@ -104,4 +102,40 @@ const { data: nextAppointment, error } = await supabase
     );
 
 
+})
+
+export const getAvailableDentistsWithSlots = AsynHandler(async (req, res) => {
+  const { date } = req.query;
+
+  if (!date) {
+    throw new ApiError(400, "Date is required.");
+  }
+
+  const dentists = await getAvailableDentists(date);
+
+  res.status(200).json({
+    success: true,
+    data: dentists,
+  });
+});
+
+export const requestDentistAppointment = AsynHandler(async(req,res)=>{
+     const { patientId, dentistId, slotId, reason } = req.body;
+
+  if (!patientId || !dentistId || !slotId || !reason) {
+    throw new ApiError(400, "All fields are required.");
+  }
+
+  const appointmentRequest = await createAppointmentRequest({
+    patientId,
+    dentistId,
+    slotId,
+    reason,
+  });
+
+  return res.status(201).json({
+    success: true,
+    message: "Appointment request created successfully.",
+    data: appointmentRequest,
+  });
 })

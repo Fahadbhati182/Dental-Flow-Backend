@@ -1,4 +1,5 @@
 import { supabase } from "../../config/db.js";
+import ApiError from "../../utils/ApiError.js";
 
 // Get next appointment (single)
 export const getNextAppointment = async (patientId) => {
@@ -118,3 +119,72 @@ export const getPastAppointments = async (patientId) => {
     throw new Error("Failed to fetch past appointments");
   }
 };
+
+export const requestAppointment = async(
+   patientId,
+  reason,
+  urgency,
+  preferredDate,
+  preferredTime)=>{
+  try {
+     const { data: patient, error: patientError } = await supabase
+    .from("patients")
+    .select("patient_id")
+    .eq("patient_id", patientId)
+    .single();
+
+    if(patientError || !patient){
+      throw new ApiError(404,"Patient not found")
+    }
+    const{data:existingRequest,error:requestError} = await supabase
+    .from("appointment_requests")
+    .select("request_id")
+    .eq("patient_id",patientId)
+    .eq("status","pending")
+    .maybeSingle();
+     if (requestError) {
+    throw new ApiError(500, requestError.message);
+  }
+
+  if (existingRequest) {
+    throw new ApiError(
+      409,
+      "You already have a pending appointment request."
+    );
+  }
+
+
+  //prevent selecting a past date
+
+   const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const selectedDate = new Date(preferredDate);
+
+  if (selectedDate < today) {
+    throw new ApiError(
+      400,
+      "Preferred appointment date cannot be in the past."
+    );
+  }
+
+  const { data, error } = await supabase
+    .from("appointment_requests")
+    .insert({
+      patient_id: patientId,
+      reason,
+      urgency,
+      preferred_date: preferredDate,
+      preferred_time: preferredTime,
+      status: "pending",
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw new ApiError(500, error.message);
+  }
+  } catch (error) {
+    console.log(error)
+  }
+}

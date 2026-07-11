@@ -8,6 +8,7 @@ import {
   getNext,
   getPast,
   getUpcoming,
+  scheduleAppointment,
 } from "../controllers/patient.controller.js";
 import { authUser, checkRolesAllowed } from "../middlewares/authUser.js";
 
@@ -28,5 +29,5 @@ patientRouter.put("/medical-history", updatePatientMedicalHistory);
 patientRouter.get("/appointments/next", getNext);
 patientRouter.get("/appointments/upcoming", getUpcoming);
 patientRouter.get("/appointments/past", getPast);
-
+patientRouter.post("/appointments/requests",scheduleAppointment)
 export default patientRouter;

@@ -3,6 +3,7 @@ import {
   getNextAppointment,
   getPastAppointments,
   getUpcomingAppointments,
+  requestAppointment,
 } from "../services/appointment/patient.js";
 import AsynHandler from "../utils/AsynHandler.js";
 import ApiError from "../utils/ApiError.js";
@@ -430,3 +431,24 @@ export const getUpcoming = AsynHandler(async (req, res) => {
 
   return res.status(200).json({ success: true, data });
 });
+
+export const scheduleAppointment = AsynHandler((req,res)=>{
+  const patientId = getPatientIdFromUser(req);
+  const {reason,urgency,preferedDate,preferedTime} = req.body;
+
+  if(!reason || !urgency || !preferedDate || !preferedTime){
+    throw new ApiError(400,"enter all the details")
+  }
+  const appointmentRequest = await requestAppointment(patientId,
+  reason,
+  urgency,
+  preferredDate,
+  preferredTime)
+
+   res.status(201).json({
+    success: true,
+    message: "Appointment request submitted successfully.",
+    data: appointmentRequest,
+  });
+  
+})

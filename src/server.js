@@ -8,6 +8,7 @@ import ApiError from "./utils/ApiError.js";
 import adminRouter from "./routes/admin.routes.js";
 import dentistRouter from "./routes/dentist.routes.js";
 import patientRouter from "./routes/patient.route.js";
+import receptionistRouter from "./routes/receptionist.route.js";
 
 const app = express();
 
@@ -22,6 +23,7 @@ app.use("/api/v1/admin", adminRouter);
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/patient", patientRouter);
 app.use("/api/v1/user", dentistRouter);
+app.use("/api/v1/receptionist", receptionistRouter);
 
 app.use("/", (req, res) => {
   return res.send(`Server of Dental Website is running on ${process.env.PORT}`);
