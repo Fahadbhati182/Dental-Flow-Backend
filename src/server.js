@@ -12,10 +12,10 @@ import receptionistRouter from "./routes/receptionist.route.js";
 
 const app = express();
 
-const allowedOrgins = ["*"];
+const allowedOrgins = ["http://localhost:3000"];
 
 app.use(express.json());
-app.use(cors({ origin: allowedOrgins }));
+app.use(cors({ origin: allowedOrgins,credentials: true }));
 app.use(cookieParser("dental-app-backend-secret"));
 
 // routes

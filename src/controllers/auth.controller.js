@@ -23,8 +23,8 @@ export const registerUser = AsynHandler(async (req, res) => {
     .eq("email", email)
     .maybeSingle();
 
-  console.log(userError);
-  console.log(exitingUser, userError);
+  // console.log(userError);
+  // console.log(exitingUser, userError);
 
   if (exitingUser) {
     res.status(400);
@@ -45,11 +45,11 @@ export const registerUser = AsynHandler(async (req, res) => {
 
   if (error || !user) {
     console.log("INSERT USER:", user);
-console.log("INSERT ERROR:", error);
+    console.log("INSERT ERROR:", error);
     res.status(500);
     throw new ApiError(500, "Something went wrong");
   }
-
+  console.log(user);
   res
     .status(201)
     .json(new ApiResponse(201, "User registered successfully", user));
@@ -57,6 +57,8 @@ console.log("INSERT ERROR:", error);
 
 export const loginUser = AsynHandler(async (req, res) => {
   const { email, password, role } = req.body;
+
+  console.log(email, password, role);
   if (!email || !password || !role) {
     res.status(400);
     throw new ApiError(400, "Please fill all the fields");
@@ -66,8 +68,10 @@ export const loginUser = AsynHandler(async (req, res) => {
     .from("users")
     .select("*")
     .eq("email", email)
-    .eq("role_type", role)
+    .eq("role_type", role?.toLowerCase())
     .single();
+
+  console.log(user, error);
 
   if (error || !user) {
     res.status(400);
@@ -75,13 +79,13 @@ export const loginUser = AsynHandler(async (req, res) => {
   }
 
   // oauth for all
-  if (user.oauth_provider) {
-    res.status(400);
-    throw new ApiError(400, `Please login with ${user.oauth_provider} account`);
-  }
-
+  // if (user.oauth_provider) {
+  //   res.status(400);
+  //   throw new ApiError(400, `Please login with ${user.oauth_provider} account`);
+  // }
 
   const isMatch = await authService.comparePassword(password, user.password);
+  console.log("isMatch", isMatch);
   if (!isMatch) {
     res.status(400);
     throw new ApiError(400, "Invalid credentials");
@@ -110,15 +114,19 @@ export const loginUser = AsynHandler(async (req, res) => {
   });
 
   const userData = {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: user.role_type,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role_type,
+    },
     accessToken,
     refreshToken,
   };
 
-  res.status(200).json(new ApiResponse(200, "Logged in successfully", userData));
+  res
+    .status(200)
+    .json(new ApiResponse(200, "Logged in successfully", userData));
 });
 
 export const logoutUser = AsynHandler(async (req, res) => {
@@ -428,7 +436,7 @@ export const redirectToGoogleOAuth = AsynHandler(async (req, res) => {
 // handle google oauth callback and exchange code for access token and refresh token
 export const googleOAuthCallback = AsynHandler(async (req, res) => {
   const { code } = req.query;
-
+  console.log(code);
   if (!code) {
     res.status(400);
     throw new ApiError(400, "Invalid request");
@@ -436,14 +444,13 @@ export const googleOAuthCallback = AsynHandler(async (req, res) => {
 
   const { tokens } = await oauthClient.getToken(code);
   const idToken = tokens.id_token;
-
+  console.log(idToken);
   const ticket = await oauthClient.verifyIdToken({
     idToken,
     audience: process.env.GOOGLE_OAUTH_CLIENT_ID,
   });
 
   const payload = ticket.getPayload();
-
 
   if (!payload) {
     res.status(400);
@@ -487,18 +494,20 @@ export const googleOAuthCallback = AsynHandler(async (req, res) => {
     user = newUser;
   }
 
-  const { accessToken, refreshToken } = await authService.generateAccessAndRefreshTokens(user.id);
+  console.log(user);
+  const { accessToken, refreshToken } =
+    await authService.generateAccessAndRefreshTokens(user.id);
 
   const { error: updateUserError } = await supabase
-      .from("users")
-      .update({ refresh_token: refreshToken })
-      .eq("id", user.id)
-      .select()
-      .single();
+    .from("users")
+    .update({ refresh_token: refreshToken })
+    .eq("id", user.id)
+    .select()
+    .single();
 
-    if (updateUserError) {
-      return res.status(500).json(new ApiError(500, "Something went wrong "));
-    }
+  if (updateUserError) {
+    return res.status(500).json(new ApiError(500, "Something went wrong "));
+  }
 
   res
     .status(200)
@@ -518,6 +527,7 @@ export const googleOAuthCallback = AsynHandler(async (req, res) => {
 
 export const googleOneTapLogin = AsynHandler(async (req, res) => {
   const { token } = req.body;
+  console.log(token);
 
   if (!token) {
     res.status(400);
@@ -573,7 +583,7 @@ export const googleOneTapLogin = AsynHandler(async (req, res) => {
     }
     user = newUser;
   }
-
+  console.log(user);
   const { accessToken, refreshToken } =
     await authService.generateAccessAndRefreshTokens(user.id);
   return res
